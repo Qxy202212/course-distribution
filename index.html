@@ -1468,8 +1468,24 @@ img, video, canvas, svg { max-width: 100%; }
     .list-search { flex: 1; min-width: 0; display: block; }
     .dist-toolbar .kd-button { flex-shrink: 0; }
 
+    .time-block { padding-bottom: 12px; }
+    .time-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+    .time-grid > * { min-width: 0; }
+    .time-grid .kd-input { display: block; }
+    .time-grid .kd-input-inner { width: 100%; }
+    .time-error {
+      margin-top: 4px;
+      font-size: var(--kd-font-size-sub-base);
+      line-height: 20px;
+      color: var(--kd-color-text-error);
+    }
+
     .dist-table-scroll {
-      max-height: calc(100vh - 300px);
+      max-height: calc(100vh - 380px);
       min-height: 180px;
       overflow: auto;
     }
@@ -1593,6 +1609,30 @@ img, video, canvas, svg { max-width: 100%; }
           </div>
 
           <div class="kd-modal-body-card kd-modal-body-card-c3">
+            <div class="time-block">
+              <div class="time-grid">
+                <div class="kd-field">
+                  <div class="kd-field-label"><span class="req-mark" aria-hidden="true">*</span>资源开放时间</div>
+                  <!-- [Input: medium datetime] -->
+                  <div class="kd-input kd-input-medium" id="openField">
+                    <div class="kd-input-wrap">
+                      <input class="kd-input-inner" id="openAt" type="datetime-local" value="2026-10-12T08:00" aria-label="资源开放时间" required>
+                    </div>
+                  </div>
+                </div>
+                <div class="kd-field">
+                  <div class="kd-field-label"><span class="req-mark" aria-hidden="true">*</span>截止时间</div>
+                  <!-- [Input: medium datetime] -->
+                  <div class="kd-input kd-input-medium" id="closeField">
+                    <div class="kd-input-wrap">
+                      <input class="kd-input-inner" id="closeAt" type="datetime-local" value="2026-12-31T23:59" aria-label="截止时间" required>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="scope-hint" id="timeOkHint">院校只能在这段时间内访问本课程。公开到全部和公开到部分共用这一段时间。</p>
+              <p class="time-error" id="timeError" hidden></p>
+            </div>
             <div id="partialPane">
               <p class="scope-hint">仅对下列院校公开。与「公开到全部」互斥，同一时间只生效一种。</p>
               <div class="dist-toolbar">
@@ -1740,6 +1780,7 @@ img, video, canvas, svg { max-width: 100%; }
                 </div>
               </div>
             </div>
+            <p class="field-hint" id="addTimeHint"></p>
             <p class="field-hint">可按企业 ID 或企业名称搜索。已公开的院校保持勾选并置灰，不能在这里取消。</p>
           </div>
         </div>
@@ -2186,12 +2227,44 @@ img, video, canvas, svg { max-width: 100%; }
       allPane.hidden = partialOn;
     }
 
+    var openAt = document.getElementById('openAt');
+    var closeAt = document.getElementById('closeAt');
+    var openField = document.getElementById('openField');
+    var closeField = document.getElementById('closeField');
+    var timeError = document.getElementById('timeError');
+    var timeOkHint = document.getElementById('timeOkHint');
+
+    function formatDt(value) {
+      return value ? value.replace('T', ' ') : '未设置';
+    }
+
+    function windowText() {
+      return '资源开放时间 ' + formatDt(openAt.value) + '，截止时间 ' + formatDt(closeAt.value);
+    }
+
+    function validateTimes() {
+      var open = openAt.value;
+      var close = closeAt.value;
+      var message = '';
+      if (!open || !close) message = '请填写资源开放时间和截止时间';
+      else if (close <= open) message = '截止时间需要晚于资源开放时间';
+      var invalid = !!message;
+      openField.classList.toggle('kd-input-status-error', invalid);
+      closeField.classList.toggle('kd-input-status-error', invalid);
+      timeError.hidden = !invalid;
+      timeError.textContent = message;
+      timeOkHint.hidden = invalid;
+      document.getElementById('openAdd').disabled = invalid;
+      return !invalid;
+    }
+
     function renderScope() {
       setSegment(scope);
+      var windowLine = windowText() + '。';
       if (scope === 'partial') renderTable(false);
-      else allSub.textContent = assigned.length
+      allSub.textContent = (assigned.length
         ? '已配置 ' + assigned.length + ' 所院校，切回「公开到部分」后恢复，无需重新添加。'
-        : '当前没有按院校配置的公开范围。';
+        : '当前没有按院校配置的公开范围。') + windowLine;
     }
 
     function toast(text) {
@@ -2231,6 +2304,7 @@ img, video, canvas, svg { max-width: 100%; }
 
     function onScopeClick(next) {
       if (next === scope) return;
+      if (!validateTimes()) return;
       if (next === 'all' && assigned.length) {
         openConfirm({
           title: '切换为公开到全部',
@@ -2299,6 +2373,8 @@ img, video, canvas, svg { max-width: 100%; }
     function syncAddOk() { addOk.disabled = pending.size === 0; }
 
     function openAdd() {
+      if (!validateTimes()) return;
+      document.getElementById('addTimeHint').textContent = '本次分发：' + windowText() + '。';
       pending = new Set();
       addSearch.value = '';
       renderAddTags();
@@ -2385,6 +2461,9 @@ img, video, canvas, svg { max-width: 100%; }
     });
 
     renderScope();
+    validateTimes();
+    openAt.addEventListener('change', validateTimes);
+    closeAt.addEventListener('change', validateTimes);
 
     document.querySelector('.kd-segmented-controller').addEventListener('click', function(e) {
       var btn = e.target.closest('[data-scope]');
